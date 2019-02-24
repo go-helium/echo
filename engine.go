@@ -37,6 +37,7 @@ type (
 	}
 )
 
+// Module engine
 var Module = module.Module{
 	{Constructor: NewValidator},
 	{Constructor: NewBinder},
