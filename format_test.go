@@ -59,25 +59,25 @@ var testCases = []testCase{
 }
 
 func TestCheckErrors(t *testing.T) {
-	Convey("Prepare validator", t, func() {
+	Convey("Prepare validator", t, func(c C) {
 		v := NewValidator()
 
-		So(v, ShouldNotBeNil)
+		c.So(v, ShouldNotBeNil)
 
-		So(func() {
+		c.So(func() {
 			AddTagParsers(func(reflect.StructTag) string {
 				return "-"
 			})
 		}, ShouldNotPanic)
 
-		Convey("check custom formatter", func() {
+		c.Convey("check custom formatter", func(c C) {
 			test := testCases[0]
 			errValidate := v.Validate(test.Struct)
 
 			if test.Error == nil {
-				So(errValidate, ShouldBeNil)
+				c.So(errValidate, ShouldBeNil)
 			} else {
-				So(errValidate, ShouldBeError)
+				c.So(errValidate, ShouldBeError)
 			}
 
 			ok, err := CheckErrors(ValidateParams{
@@ -85,32 +85,32 @@ func TestCheckErrors(t *testing.T) {
 				Errors: errValidate,
 				Formatter: func(fields []*FieldError) string {
 					for _, item := range fields {
-						So(item, ShouldNotBeNil)
-						So(item, ShouldBeError)
+						c.So(item, ShouldNotBeNil)
+						c.So(item, ShouldBeError)
 					}
 					return defaultFormatter(fields)
 				},
 			})
 
 			if test.Error == nil {
-				So(ok, ShouldBeFalse)
-				So(err, ShouldBeNil)
+				c.So(ok, ShouldBeFalse)
+				c.So(err, ShouldBeNil)
 			} else {
-				So(ok, ShouldBeTrue)
-				So(err, ShouldNotBeNil)
-				So(err.Error(), ShouldEqual, test.Error.Error())
+				c.So(ok, ShouldBeTrue)
+				c.So(err, ShouldNotBeNil)
+				c.So(err.Error(), ShouldEqual, test.Error.Error())
 			}
 		})
 
-		So(len(testCases) > 0, ShouldBeTrue)
+		c.So(len(testCases) > 0, ShouldBeTrue)
 		for _, test := range testCases {
-			Convey(test.Name, func() {
+			c.Convey(test.Name, func(c C) {
 				errValidate := v.Validate(test.Struct)
 
 				if test.Error == nil {
-					So(errValidate, ShouldBeNil)
+					c.So(errValidate, ShouldBeNil)
 				} else {
-					So(errValidate, ShouldBeError)
+					c.So(errValidate, ShouldBeError)
 				}
 
 				ok, err := CheckErrors(ValidateParams{
@@ -119,12 +119,12 @@ func TestCheckErrors(t *testing.T) {
 				})
 
 				if test.Error == nil {
-					So(ok, ShouldBeFalse)
-					So(err, ShouldBeNil)
+					c.So(ok, ShouldBeFalse)
+					c.So(err, ShouldBeNil)
 				} else {
-					So(ok, ShouldBeTrue)
-					So(err, ShouldNotBeNil)
-					So(err.Error(), ShouldEqual, test.Error.Error())
+					c.So(ok, ShouldBeTrue)
+					c.So(err, ShouldNotBeNil)
+					c.So(err.Error(), ShouldEqual, test.Error.Error())
 				}
 			})
 		}

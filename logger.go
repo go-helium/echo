@@ -2,6 +2,7 @@ package echo
 
 import (
 	"io"
+	"io/ioutil"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/gommon/log"
@@ -12,16 +13,7 @@ type (
 	echoLogger struct {
 		l *zap.SugaredLogger
 	}
-
-	// EmptyWriter struct
-	EmptyWriter struct{}
 )
-
-// Null is /dev/null emulation
-var Null = new(EmptyWriter)
-
-// Write /dev/null emulation
-func (EmptyWriter) Write(data []byte) (int, error) { return len(data), nil }
 
 // NewLogger converts zap.Logger to echo.Logger
 func NewLogger(log *zap.Logger) echo.Logger {
@@ -34,7 +26,7 @@ func NewLogger(log *zap.Logger) echo.Logger {
 
 // Output writer
 func (e *echoLogger) Output() io.Writer {
-	return Null
+	return ioutil.Discard
 }
 
 // SetOutput do nothing

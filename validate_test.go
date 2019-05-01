@@ -57,26 +57,26 @@ var cases = []struct {
 }
 
 func TestValidate_Register(t *testing.T) {
-	Convey("Validator", t, func() {
+	Convey("Validator", t, func(c C) {
 		var (
 			v   = NewValidator()
 			err = v.Register("some", someValidatorFunc)
 		)
 
-		So(err, ShouldBeNil)
+		c.So(err, ShouldBeNil)
 
-		Convey("try cases", func() {
+		c.Convey("try cases", func(c C) {
 			for _, test := range cases {
 				err = v.Validate(test.item)
 				switch test.error {
 				case nil:
-					So(err, ShouldBeNil)
+					c.So(err, ShouldBeNil)
 				default:
 					if ok, vErr := CheckErrors(ValidateParams{
 						Struct: test.item,
 						Errors: err,
 					}); ok {
-						So(vErr, ShouldBeError, test.error)
+						c.So(vErr, ShouldBeError, test.error)
 					} else {
 						t.FailNow()
 					}

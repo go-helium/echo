@@ -14,6 +14,7 @@ import (
 	"github.com/labstack/echo/v4"
 	. "github.com/smartystreets/goconvey/convey"
 	"github.com/spf13/viper"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/dig"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -59,6 +60,7 @@ type myTestCustomError struct {
 func (e myTestCustomError) Error() string {
 	return e.Message
 }
+
 func (e myTestCustomError) FormatResponse(ctx echo.Context) error {
 	if e.Fail {
 		return errors.New(e.Message)
@@ -127,84 +129,139 @@ func newTestLogger(rw zapcore.WriteSyncer) *zap.Logger {
 	return zap.New(core)
 }
 
+func TestLoggerMiddleware(t *testing.T) {
+	var (
+		err error
+
+		va  = NewValidator()
+		b   = NewBinder(va)
+		vi  = newTestViper()
+		dic = dig.New()
+	)
+
+	err = module.Provide(dic, module.Module{
+		{Constructor: NewEngine},
+		{Constructor: func() echo.Binder { return b }},
+		{Constructor: func() *viper.Viper { return vi }},
+		{Constructor: func() echo.Validator { return va }},
+		{Constructor: func() *zap.Logger { return zap.L() }},
+	})
+
+	require.NoError(t, err)
+
+	err = dic.Invoke(func(e *echo.Echo, z *zap.Logger) {
+		require.True(t, e.Debug)
+		require.Equal(t, b, e.Binder)
+		require.Equal(t, va, e.Validator)
+		require.IsType(t, (*echoLogger)(nil), e.Logger)
+
+		e.Use(LoggerMiddleware(z))
+
+		z.Warn("test")
+
+		{ // Fail
+			req, err := http.NewRequest(echo.GET, "http://localhost", nil)
+			require.NoError(t, err)
+
+			rec := httptest.NewRecorder()
+			e.ServeHTTP(rec, req)
+		}
+
+		{ // OK
+			req, err := http.NewRequest(echo.GET, "http://localhost", nil)
+			require.NoError(t, err)
+
+			rec := httptest.NewRecorder()
+
+			e.GET("/", func(ctx echo.Context) error { return ctx.String(http.StatusOK, "OK") })
+			e.ServeHTTP(rec, req)
+		}
+	})
+
+	require.NoError(t, err)
+}
+
 func TestEngine(t *testing.T) {
-	Convey("Engine", t, func() {
-		Convey("try create and check new engine", func() {
+	Convey("Engine", t, func(c C) {
+		c.Convey("try create and check new engine", func(c C) {
+			var err error
+
+			log, err := zap.NewDevelopment()
+			c.So(err, ShouldBeNil)
+
 			var (
-				v = NewValidator()
-				b = NewBinder(v)
-				z = zap.L()
-				l = NewLogger(z)
-				c = newTestViper()
+				va = NewValidator()
+				b  = NewBinder(va)
+				z  = log // zap.L()
+				l  = NewLogger(z)
+				vi = newTestViper()
 
-				_ = c
-
-				err error
+				_   = vi
 				dic = dig.New()
 			)
 
-			Convey("create engine with empty params", func() {
+			c.Convey("create engine with empty params", func(c C) {
 				err = module.Provide(dic, module.Module{
 					{Constructor: NewEngine},
 				})
 
-				So(err, ShouldBeNil)
+				c.So(err, ShouldBeNil)
 
 				err = dic.Invoke(func(e *echo.Echo) {
-					So(e.Binder, ShouldNotEqual, b)
-					So(e.Logger, ShouldNotEqual, l)
-					So(e.Validator, ShouldNotEqual, v)
-					So(e.Debug, ShouldBeFalse)
+					c.So(e.Binder, ShouldNotEqual, b)
+					c.So(e.Logger, ShouldNotEqual, l)
+					c.So(e.Validator, ShouldNotEqual, va)
+					c.So(e.Debug, ShouldBeFalse)
 				})
 
-				So(err, ShouldBeNil)
+				c.So(err, ShouldBeNil)
 			})
 
-			Convey("create engine with binder, zap.logger, validate and debug", func() {
+			c.Convey("create engine with binder, zap.logger, validate and debug", func(c C) {
 				err = module.Provide(dic, module.Module{
-					{Constructor: func() echo.Validator { return v }},
+					{Constructor: func() echo.Validator { return va }},
 					{Constructor: func() echo.Binder { return b }},
 					{Constructor: func() *zap.Logger { return z }},
-					{Constructor: func() *viper.Viper { return c }},
+					{Constructor: func() *viper.Viper { return vi }},
 					{Constructor: NewEngine},
 				})
 
-				So(err, ShouldBeNil)
+				c.So(err, ShouldBeNil)
 
 				err = dic.Invoke(func(e *echo.Echo) {
-					So(e.Binder, ShouldEqual, b)
+					c.So(e.Binder, ShouldEqual, b)
 					_, ok := e.Logger.(*echoLogger)
-					So(ok, ShouldBeTrue)
-					So(e.Validator, ShouldEqual, v)
-					So(e.Debug, ShouldBeTrue)
+					c.So(ok, ShouldBeTrue)
+					c.So(e.Validator, ShouldEqual, va)
+					c.So(e.Debug, ShouldBeTrue)
 				})
 
-				So(err, ShouldBeNil)
+				c.So(err, ShouldBeNil)
 			})
 
-			Convey("create engine with binder, logger, validate and debug", func() {
+			c.Convey("create engine with binder, logger, validate and debug", func(c C) {
 				err = module.Provide(dic, module.Module{
-					{Constructor: func() echo.Validator { return v }},
+					{Constructor: func() echo.Validator { return va }},
 					{Constructor: func() echo.Binder { return b }},
 					{Constructor: func() echo.Logger { return l }},
-					{Constructor: func() *viper.Viper { return c }},
+					{Constructor: func() *viper.Viper { return vi }},
 					{Constructor: NewEngine},
 				})
 
-				So(err, ShouldBeNil)
+				c.So(err, ShouldBeNil)
 
 				err = dic.Invoke(func(e *echo.Echo) {
-					So(e.Binder, ShouldEqual, b)
-					So(e.Logger, ShouldEqual, l)
-					So(e.Validator, ShouldEqual, v)
-					So(e.Debug, ShouldBeTrue)
+					c.So(e.Binder, ShouldEqual, b)
+					c.So(e.Logger, ShouldEqual, l)
+					c.So(e.Validator, ShouldEqual, va)
+					c.So(e.Debug, ShouldBeTrue)
 				})
 
-				So(err, ShouldBeNil)
+				c.So(err, ShouldBeNil)
 			})
 		})
 
-		Convey("try to capture errors", func() {
+		c.Convey("try to capture errors", func(c C) {
 			var (
 				buf      = new(bytes.Buffer)
 				z        = newTestLogger(testBuffer{Buffer: buf})
@@ -214,102 +271,93 @@ func TestEngine(t *testing.T) {
 				ctx      = e.NewContext(req, rec)
 			)
 
-			Convey("try to capture json.Unmarshal errors", func() {
-
-				So(err, ShouldBeNil)
+			c.Convey("try to capture json.Unmarshal errors", func(c C) {
+				c.So(err, ShouldBeNil)
 				err = jsonUnmarshalError()
-				So(err, ShouldBeError)
+				c.So(err, ShouldBeError)
 				captureError(z)(err, ctx)
-				So(rec.Body.Len(), ShouldBeGreaterThan, 0)
-				So(rec.Body.String(), ShouldContainSubstring, "JSON parse error: expected=")
+				c.So(rec.Body.Len(), ShouldBeGreaterThan, 0)
+				c.So(rec.Body.String(), ShouldContainSubstring, "JSON parse error: expected=")
 			})
 
-			Convey("try to capture json.Syntax errors", func() {
-
-				So(err, ShouldBeNil)
+			c.Convey("try to capture json.Syntax errors", func(c C) {
+				c.So(err, ShouldBeNil)
 				err = jsonSyntaxError()
-				So(err, ShouldBeError)
+				c.So(err, ShouldBeError)
 				captureError(z)(err, ctx)
-				So(rec.Body.Len(), ShouldBeGreaterThan, 0)
-				So(rec.Body.String(), ShouldContainSubstring, "JSON parse error: offset=")
+				c.So(rec.Body.Len(), ShouldBeGreaterThan, 0)
+				c.So(rec.Body.String(), ShouldContainSubstring, "JSON parse error: offset=")
 			})
 
-			Convey("try to capture xml.Unmarshal errors", func() {
-
-				So(err, ShouldBeNil)
+			c.Convey("try to capture xml.Unmarshal errors", func(c C) {
+				c.So(err, ShouldBeNil)
 				err = xmlUnsuportTypeError()
-				So(err, ShouldBeError)
+				c.So(err, ShouldBeError)
 				captureError(z)(err, ctx)
-				So(rec.Body.Len(), ShouldBeGreaterThan, 0)
-				So(rec.Body.String(), ShouldContainSubstring, "XML parse error: type=")
+				c.So(rec.Body.Len(), ShouldBeGreaterThan, 0)
+				c.So(rec.Body.String(), ShouldContainSubstring, "XML parse error: type=")
 			})
 
-			Convey("try to capture xml.Syntax errors", func() {
-
-				So(err, ShouldBeNil)
+			c.Convey("try to capture xml.Syntax errors", func(c C) {
+				c.So(err, ShouldBeNil)
 				err = xmlSyntaxError()
-				So(err, ShouldBeError)
+				c.So(err, ShouldBeError)
 				captureError(z)(err, ctx)
-				So(rec.Body.Len(), ShouldBeGreaterThan, 0)
-				So(rec.Body.String(), ShouldContainSubstring, "XML parse error: line=")
+				c.So(rec.Body.Len(), ShouldBeGreaterThan, 0)
+				c.So(rec.Body.String(), ShouldContainSubstring, "XML parse error: line=")
 			})
 
-			Convey("try to capture custom errors", func() {
-
-				So(err, ShouldBeNil)
+			c.Convey("try to capture custom errors", func(c C) {
+				c.So(err, ShouldBeNil)
 				err = customError()
-				So(err, ShouldBeError)
+				c.So(err, ShouldBeError)
 				captureError(z)(err, ctx)
-				So(rec.Body.Len(), ShouldBeGreaterThan, 0)
-				So(rec.Body.String(), ShouldContainSubstring, "this is custom error")
+				c.So(rec.Body.Len(), ShouldBeGreaterThan, 0)
+				c.So(rec.Body.String(), ShouldContainSubstring, "this is custom error")
 			})
 
-			Convey("try to capture custom errors and fail", func() {
-
-				So(err, ShouldBeNil)
+			c.Convey("try to capture custom errors and fail", func(c C) {
+				c.So(err, ShouldBeNil)
 				err = customErrorFail()
-				So(err, ShouldBeError)
+				c.So(err, ShouldBeError)
 				captureError(z)(err, ctx)
-				So(rec.Body.Len(), ShouldEqual, 0)
-				So(buf.String(), ShouldContainSubstring, "Capture error")
-				So(buf.String(), ShouldContainSubstring, "this is custom error")
+				c.So(rec.Body.Len(), ShouldEqual, 0)
+				c.So(buf.String(), ShouldContainSubstring, "Capture error")
+				c.So(buf.String(), ShouldContainSubstring, "this is custom error")
 			})
 
-			Convey("try to capture http.Error", func() {
-
-				So(err, ShouldBeNil)
+			c.Convey("try to capture http.Error", func(c C) {
+				c.So(err, ShouldBeNil)
 				err = httpError()
-				So(err, ShouldBeError)
+				c.So(err, ShouldBeError)
 				captureError(z)(err, ctx)
-				So(rec.Body.Len(), ShouldBeGreaterThan, 0)
-				So(rec.Body.String(), ShouldContainSubstring, "some bad request")
+				c.So(rec.Body.Len(), ShouldBeGreaterThan, 0)
+				c.So(rec.Body.String(), ShouldContainSubstring, "some bad request")
 			})
 
-			Convey("try to capture http.Error 500", func() {
-
-				So(err, ShouldBeNil)
+			c.Convey("try to capture http.Error 500", func(c C) {
+				c.So(err, ShouldBeNil)
 				err = httpInternalError()
-				So(err, ShouldBeError)
+				c.So(err, ShouldBeError)
 				captureError(z)(err, ctx)
-				So(rec.Body.Len(), ShouldBeGreaterThan, 0)
-				So(rec.Body.String(), ShouldContainSubstring, "some internal error")
-				So(buf.String(), ShouldContainSubstring, "Request error")
+				c.So(rec.Body.Len(), ShouldBeGreaterThan, 0)
+				c.So(rec.Body.String(), ShouldContainSubstring, "some internal error")
+				c.So(buf.String(), ShouldContainSubstring, "Request error")
 			})
 
-			Convey("try to capture unknown Error", func() {
-
-				So(err, ShouldBeNil)
+			c.Convey("try to capture unknown Error", func(c C) {
+				c.So(err, ShouldBeNil)
 				err = unknownError()
-				So(err, ShouldBeError)
+				c.So(err, ShouldBeError)
 				captureError(z)(err, ctx)
-				So(rec.Body.Len(), ShouldBeGreaterThan, 0)
-				So(rec.Body.String(), ShouldContainSubstring, http.StatusText(http.StatusBadRequest))
+				c.So(rec.Body.Len(), ShouldBeGreaterThan, 0)
+				c.So(rec.Body.String(), ShouldContainSubstring, http.StatusText(http.StatusBadRequest))
 			})
 
-			Convey("try to capture ctx.JSON Error", func() {
-				So(err, ShouldBeNil)
+			c.Convey("try to capture ctx.JSON Error", func(c C) {
+				c.So(err, ShouldBeNil)
 				err = unknownError()
-				So(err, ShouldBeError)
+				c.So(err, ShouldBeError)
 
 				ctx.Reset(
 					ctx.Request(),
@@ -318,9 +366,9 @@ func TestEngine(t *testing.T) {
 
 				captureError(z)(err, ctx)
 
-				So(rec.Body.Len(), ShouldBeZeroValue)
-				So(buf.Len(), ShouldBeGreaterThan, 0)
-				So(buf.String(), ShouldContainSubstring, "respWriter error")
+				c.So(rec.Body.Len(), ShouldBeZeroValue)
+				c.So(buf.Len(), ShouldBeGreaterThan, 0)
+				c.So(buf.String(), ShouldContainSubstring, "respWriter error")
 			})
 		})
 	})
