@@ -145,6 +145,8 @@ func TestLoggerMiddleware(t *testing.T) {
 		{Constructor: func() *viper.Viper { return vi }},
 		{Constructor: func() echo.Validator { return va }},
 		{Constructor: func() *zap.Logger { return zap.L() }},
+		// debug logger:
+		// {Constructor: func() (*zap.Logger, error) { return zap.NewDevelopment() }},
 	})
 
 	require.NoError(t, err)
@@ -156,8 +158,6 @@ func TestLoggerMiddleware(t *testing.T) {
 		require.IsType(t, (*echoLogger)(nil), e.Logger)
 
 		e.Use(LoggerMiddleware(z))
-
-		z.Warn("test")
 
 		{ // Fail
 			req, err := http.NewRequest(echo.GET, "http://localhost", nil)
@@ -186,13 +186,14 @@ func TestEngine(t *testing.T) {
 		c.Convey("try create and check new engine", func(c C) {
 			var err error
 
-			log, err := zap.NewDevelopment()
-			c.So(err, ShouldBeNil)
+			// Debug logger
+			// log, err := zap.NewDevelopment()
+			// c.So(err, ShouldBeNil)
 
 			var (
 				va = NewValidator()
 				b  = NewBinder(va)
-				z  = log // zap.L()
+				z  = zap.L()
 				l  = NewLogger(z)
 				vi = newTestViper()
 

@@ -27,14 +27,14 @@ var loggerMiddlewareFieldNames = []string{
 // LoggerMiddleware returns a middleware that logs HTTP requests.
 func LoggerMiddleware(log *zap.Logger) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) (err error) {
-			req := c.Request()
-			res := c.Response()
-			start := time.Now()
-			if err = next(c); err != nil {
-				c.Error(err)
-			}
-			stop := time.Now()
+		return func(c echo.Context) error {
+			var (
+				req   = c.Request()
+				res   = c.Response()
+				start = time.Now()
+				err   = next(c)
+				stop  = time.Now()
+			)
 
 			id := req.Header.Get(echo.HeaderXRequestID)
 			if id == "" {
@@ -73,7 +73,7 @@ func LoggerMiddleware(log *zap.Logger) echo.MiddlewareFunc {
 			fields = append(fields, zap.Error(err))
 			log.Info("new request", fields...)
 
-			return
+			return err
 		}
 	}
 }
